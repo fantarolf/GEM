@@ -19,7 +19,7 @@ from gem.utils import graph_util, plot_util
 from gem.evaluation import visualize_embedding as viz
 from .sdne_utils import *
 
-from keras.layers import Input, Dense, Lambda, merge
+from keras.layers import Input, Dense, Lambda, subtract
 from keras.models import Model, model_from_json
 import keras.regularizers as Reg
 from keras.optimizers import SGD, Adam
@@ -110,15 +110,9 @@ class SDNE(StaticGraphEmbedding):
         [x_hat1, y1] = self._autoencoder(x1)
         [x_hat2, y2] = self._autoencoder(x2)
         # Outputs
-        x_diff1 = merge([x_hat1, x1],
-                        mode=lambda ab: ab[0] - ab[1],
-                        output_shape=lambda L: L[1])
-        x_diff2 = merge([x_hat2, x2],
-                        mode=lambda ab: ab[0] - ab[1],
-                        output_shape=lambda L: L[1])
-        y_diff = merge([y2, y1],
-                       mode=lambda ab: ab[0] - ab[1],
-                       output_shape=lambda L: L[1])
+        x_diff1 = subtract([x_hat1, x1])
+        x_diff2 = subtract([x_hat2, x2])
+        y_diff = subtract([y2, y1])
 
         # Objectives
         def weighted_mse_x(y_true, y_pred):
@@ -144,7 +138,7 @@ class SDNE(StaticGraphEmbedding):
             ) * y_true
 
         # Model
-        self._model = Model(input=x_in, output=[x_diff1, x_diff2, y_diff])
+        self._model = Model(inputs=x_in, outputs=[x_diff1, x_diff2, y_diff])
         sgd = SGD(lr=self._xeta, decay=1e-5, momentum=0.99, nesterov=True)
         # adam = Adam(lr=self._xeta, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
         self._model.compile(
@@ -155,7 +149,7 @@ class SDNE(StaticGraphEmbedding):
 
         self._model.fit_generator(
             generator=batch_generator_sdne(S, self._beta, self._n_batch, True),
-            nb_epoch=self._num_iter,
+            epochs=self._num_iter,
             samples_per_epoch=S.nonzero()[0].shape[0] // self._n_batch,
             verbose=1
         )
